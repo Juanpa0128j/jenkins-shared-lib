@@ -1,28 +1,17 @@
-// Usage: deployApp(envName, imageFullName, dockerCredsId = 'dockerhub-creds')
-// envName: 'main' or 'dev'
-def call(String envName, String imageFullName, String dockerCredsId = 'dockerhub-creds') {
-    def container = (envName == 'main') ? 'myapp-main' : 'myapp-dev'
-    def port = (envName == 'main') ? '3000' : '3001'
+def call(String containerName, String image, String port) {
+    sh """
+    # Stop the old container if it exists
+    CID=\$(docker ps -q --filter "name=${containerName}")
+    if [ ! -z "\$CID" ]; then
+        echo "Stopping old container ${containerName}..."
+        docker stop \$CID || true
+        docker rm \$CID || true
+    fi
 
-    echo "Deploying ${imageFullName} to ${envName} as ${container} on port ${port}"
+    # Pull the latest image
+    docker pull ${image}
 
-    withCredentials([usernamePassword(credentialsId: dockerCredsId,
-                                     usernameVariable: 'DOCKER_USER',
-                                     passwordVariable: 'DOCKER_PASS')]) {
-        sh """
-            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-
-            # stop and remove only the container for this env
-            CID=\$(docker ps -q --filter "name=${container}")
-            if [ ! -z "\$CID" ]; then
-                docker stop \$CID || true
-                docker rm \$CID || true
-            fi
-
-            docker pull ${imageFullName}
-            docker run -d --name ${container} -p ${port}:3000 ${imageFullName}
-
-            docker logout
-        """
-    }
+    # Run the new container
+    docker run -d --name ${containerName} -p ${port}:3000 ${image}
+    """
 }
